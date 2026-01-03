@@ -1,0 +1,142 @@
+-- DELTA ADVANCED INVISIBILITY SCRIPT
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local LP = Players.LocalPlayer
+
+local function getChar()
+    return LP.Character or LP.CharacterAdded:Wait()
+end
+
+local Character = getChar()
+local invisible = false
+local connection
+
+-- GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "DeltaProInvisGUI"
+gui.ResetOnSpawn = false
+gui.Parent = gethui()
+
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 200, 0, 60)
+frame.Position = UDim2.new(0.05, 0, 0.4, 0)
+frame.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+frame.Active = true
+frame.Draggable = true
+
+local corner = Instance.new("UICorner", frame)
+corner.CornerRadius = UDim.new(0, 14)
+
+local button = Instance.new("TextButton", frame)
+button.Size = UDim2.new(1, -10, 1, -10)
+button.Position = UDim2.new(0, 5, 0, 5)
+button.Text = "👻 Invisibilidad"
+button.TextScaled = true
+button.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+button.BorderSizePixel = 0
+
+local corner2 = Instance.new("UICorner", button)
+corner2.CornerRadius = UDim.new(0, 12)
+
+-- Animación
+local function animate()
+    TweenService:Create(
+        frame,
+        TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        {Size = UDim2.new(0, 220, 0, 65)}
+    ):Play()
+    task.wait(0.25)
+    TweenService:Create(
+        frame,
+        TweenInfo.new(0.25),
+        {Size = UDim2.new(0, 200, 0, 60)}
+    ):Play()
+end
+
+-- Invisibilidad avanzada
+local function applyInvisibility()
+    local humanoid = Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+    end
+
+    for _, v in ipairs(Character:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Transparency = 1
+            v.CanCollide = false
+            v.CastShadow = false
+        elseif v:IsA("Decal") then
+            v.Transparency = 1
+        elseif v:IsA("Accessory") then
+            local h = v:FindFirstChild("Handle")
+            if h then
+                h.Transparency = 1
+                h.CanCollide = false
+                h.CastShadow = false
+            end
+        end
+    end
+end
+
+local function removeInvisibility()
+    local humanoid = Character:FindFirstChildOfClass("Humanoid")
+    if humanoid then
+        humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+    end
+
+    for _, v in ipairs(Character:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Transparency = 0
+            v.CanCollide = true
+            v.CastShadow = true
+        elseif v:IsA("Decal") then
+            v.Transparency = 0
+        elseif v:IsA("Accessory") then
+            local h = v:FindFirstChild("Handle")
+            if h then
+                h.Transparency = 0
+                h.CanCollide = false
+                h.CastShadow = true
+            end
+        end
+    end
+end
+
+-- Mantener invisibilidad (anti reset)
+local function maintain()
+    if connection then connection:Disconnect() end
+    connection = RunService.Stepped:Connect(function()
+        if invisible and Character then
+            applyInvisibility()
+        end
+    end)
+end
+
+-- Botón
+button.MouseButton1Click:Connect(function()
+    invisible = not invisible
+    animate()
+
+    if invisible then
+        applyInvisibility()
+        maintain()
+        button.Text = "👁️ Visible"
+    else
+        if connection then connection:Disconnect() end
+        removeInvisibility()
+        button.Text = "👻 Invisibilidad"
+    end
+end)
+
+-- Respawn
+LP.CharacterAdded:Connect(function(char)
+    Character = char
+    task.wait(0.4)
+    if invisible then
+        applyInvisibility()
+        maintain()
+    end
+end)
