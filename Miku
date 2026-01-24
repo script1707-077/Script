@@ -1,0 +1,484 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local Workspace = game:GetService("Workspace")
+local GuiService = game:GetService("GuiService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local SETTINGS_FILE = "Miku_v1_SecureWebhook.json" 
+local FORCE_DELAY = 0.25 
+
+local function playClickSound()
+    task.spawn(function()
+        local sound = Instance.new("Sound")
+        sound.SoundId = "rbxassetid://94753039770005"
+        sound.Volume = 1
+        sound.Parent = Workspace
+        sound:Play()
+        sound.Ended:Wait()
+        sound:Destroy()
+    end)
+end
+
+local function safeGetConnections(sig)
+    local ok, res = pcall(function() return getconnections(sig) end)
+    if ok and type(res) == "table" then return res end
+    return nil
+end
+
+local function safeFireSignal(signal)
+    if not signal then return false end
+    local cons = safeGetConnections(signal)
+    if cons then
+        for _, c in ipairs(cons) do
+            task.spawn(function() 
+                if c.Function then
+                    if type(c.Function) == "function" then pcall(c.Function)
+                    elseif type(c.Function) == "userdata" then pcall(c.Function) end
+                elseif type(c) == "function" then pcall(c) end
+            end)
+        end
+        return true
+    end
+    local ok, _ = pcall(function()
+        if signal.Fire then signal:Fire()
+        elseif signal.Invoke then signal:Invoke()
+        elseif signal.Activate then signal:Activate()
+        elseif type(signal) == "function" then signal() end
+    end)
+    return ok
+end
+
+local function safeSetTextBox(tb, txt)
+    if not tb then return false end
+    pcall(function()
+        if tb.Focused then pcall(function() safeFireSignal(tb.Focused) end) end
+        tb.Text = tostring(txt) 
+        if tb.FocusLost then pcall(function() safeFireSignal(tb.FocusLost) end) end
+    end)
+    return true
+end
+
+local chilliTextbox = nil
+local chilliButton = nil
+
+local function ultraFindGUI()
+    task.spawn(function()
+        while true do
+            pcall(function()
+                local tempTextbox, tempButton
+                local roots = {game:GetService('CoreGui'), playerGui}
+                for _, root in ipairs(roots) do
+                    local jobIDLabel
+                    for _, v in ipairs(root:GetDescendants()) do
+                        if v:IsA("TextLabel") and v.Text:match("Job%-ID Input") and v.Parent then
+                            jobIDLabel = v;
+                            break
+                        end
+                    end
+                    if jobIDLabel then
+                        local container = jobIDLabel.Parent.Parent or jobIDLabel.Parent
+                        for _, v in ipairs(container:GetDescendants()) do
+                            if v:IsA("TextBox") then tempTextbox = v end
+                            if tempTextbox then break end
+                        end
+                        for _, v in ipairs(container:GetDescendants()) do
+                            if v:IsA("TextButton") and v.Text:match("Join Job%-ID") then tempButton = v;
+                            break end
+                        end
+                        if not tempButton then
+                            for _, v in ipairs(root:GetDescendants()) do
+                                if v:IsA("TextButton") and v.Text:match("Join Job%-ID") then tempButton = v;
+                                break end
+                            end
+                        end
+                    end
+                    if tempTextbox and tempButton then break end
+                end
+                if tempTextbox and tempButton then chilliTextbox = tempTextbox;
+                chilliButton = tempButton end
+            end)
+            if chilliTextbox and chilliButton then break end
+            task.wait(0.5) 
+        end
+    end)
+end
+
+local function ultraCheckjobid(id)
+    if not chilliTextbox or not chilliButton then return false end
+    pcall(function() safeSetTextBox(chilliTextbox, tostring(id)) end)
+    task.spawn(function()
+        local events = {chilliButton.Activated, chilliButton.MouseButton1Click, chilliButton.MouseButton1Down}
+        for _, event in ipairs(events) do 
+            local connections = safeGetConnections(event)
+            if connections then
+                for _, con in ipairs(connections) do if con.Function then pcall(con.Function) end end
+            else
+                if event then pcall(function() safeFireSignal(event) end) end
+            end
+        end
+    end)
+    return true
+end
+ultraFindGUI()
+
+local COLORS = {
+    Background = Color3.fromRGB(12, 12, 18),
+    SectionBG = Color3.fromRGB(20, 25, 35),
+    Stroke = Color3.fromRGB(0, 255, 255), 
+    TextWhite = Color3.fromRGB(255, 255, 255),
+    MoneyText = Color3.fromRGB(100, 255, 150),
+    Selected = Color3.fromRGB(0, 160, 220), 
+    Unselected = Color3.fromRGB(35, 40, 55),
+    ForceActive = Color3.fromRGB(255, 50, 50),
+    AntiLagActive = Color3.fromRGB(0, 150, 255),
+    ForgeBlue = Color3.fromRGB(0, 160, 220),
+    Tier1 = Color3.fromRGB(0, 255, 255),
+    Tier2 = Color3.fromRGB(255, 180, 0),
+    Tier3 = Color3.fromRGB(255, 100, 0),
+    Tier4 = Color3.fromRGB(255, 0, 60)
+}
+
+local PET_DATABASE = {
+    ["Brainrot God"] = {
+        "Alessio", "Anpali Babel", "Antonio", "Aquanut", "Aquatic Index", "Ballerina Peppermintina", 
+        "Ballerino Lololo", "Bambu Bambu Sahur", "Belula Beluga", "Bombardini Tortinii", 
+        "Brainrot God Lucky Block", "Brasilini Berimbini", "Brr es Teh Patipum", "Bulbito Bandito Traktorito", 
+        "Cacasito Satalito", "Capi Taco", "Cappuccino Clownino", "Chihuanini Taconini", "Cocofanto Elefanto", 
+        "Corn Corn Corn Sahur", "Crabbo Limonetta", "Dug dug dug", "Espresso Signora", "Extinct Ballerina", 
+        "Fishing Event", "Frio Ninja", "Gattatino Neonino", "Gattatino Nyanino", "Gattito Tacoto", 
+        "Girafa Celestre", "Granchiello Spiritell", "Indonesian Event", "Jacko Jack Jack", "Krupuk Pagi Pagi", 
+        "Las Cappuchinas", "Los Bombinitos", "Los Chihuaninis", "Los Crocodillitos", "Los Gattitos", 
+        "Los Orcalitos", "Los Tipi Tacos", "Los Tungtungtungcitos", "Mastodontico Telepiedone", "Matteo", 
+        "Money Money Man", "Mummy Ambalabu", "Noo La Polizia", "Odin Din Din Dun", "Orcalero Orcala", 
+        "Orcalita Orcala", "Pakrahmatmamat", "Pakrahmatmatina", "Piccione Macchina", "Piccionetta Machina", 
+        "Pop Pop Sahur", "Skull Skull Skull", "Snailenzo", "Squalanana", "Statutino Libertino", 
+        "Tartaruga Cisterna", "Tentacolo Tecnico", "Tigroligre Frutonni", "Tipi Topi Taco", 
+        "Tractoro Dinosauro", "Tralalero Tralala", "Tralalita Tralala", "Trenostruzzo Turbo 3000", 
+        "Trippi Troppi Troppa Trippa", "Tukanno Bananno", "Unclito Samito", "Urubini Flamenguini", 
+        "Vampira Cappuccina"
+    },
+    ["Secret"] = {
+        "1x1x1x1", "25", "67", "Agarrini La Palini", 
+        "Bisonte Giuppitere", "Blackhole Goat", "Boatito Auratito", "Burguro and Fryuro", "Burrito Bandito", 
+        "Capitano Moby", "Celularcini Viciosini", "Chachechi", "Chicleteira Bicicleteira", 
+        "Chicleteirina Bicicleteirina", "Chillin Chili", "Chimpanzini Spiderini", "Chipso and Queso", 
+        "Coffin Tung Tung Tung Sahur", "Combinasions", "Cooki and Milki", "Cuadramat and Pakrahmatmamat", 
+        "Dragon Cannelloni", "Dul Dul Dul", "Esok Sekolah", "Eviledon", "Extinct Matteo", 
+        "Extinct Tralalero", "Festive 67", "Fishing Event", "Fishino Clownino", "Fragola La La La", 
+        "Fragrama and Chocrama", "Frankentteo", "Garama and Madundung", "Giftini Spyderini", 
+        "Gobblino Uniciclino", "Graipuss Medussi", "Guerriro Digitale", "Guest 666", "Headless Horseman", 
+        "Hokka Horloge", "Horegini Boom", "Jackorilla", "Job Job Job Sahur", "Karker Sahur", 
+        "Karkerkar Kurkur", "Ketchuru and Musturu", "Ketupat Kepat", "La Casa Boo", "La Cucaracha", 
+        "La Extinct Grande", "La Ginger Sekolah", "La Gingerbread Kepat", "La Grande Combinasion", 
+        "La Jolly Grande", "La Karkerkar Combinasion", "La Sahur Combinasion", "La Secret Combinasion", 
+        "La Spooky Grande", "La Supreme Combinasion", "La Taco Combinasion", "La Vacca Jacko Linterino", 
+        "La Vacca Presento Natalina", "La Vacca Saturno Saturnita", "Las Sis", "Las Tralaleritas", 
+        "Las Vaquitas Saturnitas", "Lavadorito Spinito", "Los 67", "Los Bros", "Los Chicleteiras", 
+        "Los Combinasionas", "Los Hotspotsitos", "Los Jobcitos", " Los cucarachas", "Los Karkeritos", "Los Matteos", 
+        "Los Mobilis", "Los Nooo My Hotspotsitos", "Los Planitos", "Los Quesadillas", "Los Spaghettis", 
+        "Los Spooky Combinasionas", "Los Spyderinis", "Los Tacoritas", "Los Tortus", "Los Tralaleritos", 
+        "Los Burritos", "Telemorte", 
+        "Mariachi Corazoni", "Mieteteira Bicicleteira", "Money Money Puggy", "Noo my Candy", 
+        "Noo my examine", "Nooo My Hotspot", "Nuclearo Dinossauro", "Orcaledon", "Perrito Burrito", 
+        "Pirulitoita Bicicleteira", "Pot Hotspot", "Pot Pumpkin", "Pumpkini Spyderini", 
+        "Quesadilla Crocodila", "Quesadillo Vampiro", "Rang Ring Bus", "Sammyni Spyderini", 
+        "Santa Chicleteira", "Spaghetti Tualetti", "Spooky and Pumpky", "Swag Soda", 
+        "Tacorita Bicicleta", "Tamaluk un Meass", "Tang Tang Keletang", "Tictac Sahur", 
+        "To to to Sahur", "Torrtuginni Dragonfrutini", "Tralaledon", "Trenostruzzo Turbo 4000", 
+        "Trickolino", "Tung Tung Tung Sahur", "Vulturino Skeletono", "W or L", "Yess my examine", 
+        "Zombie Tralala"
+    },
+    ["OG"] = {
+        "Strawberry Elephant", "Meowl"
+    }
+}
+
+local state = {
+    autoJoin = false,
+    minMoney = 10,
+    minForceMoney = 100, 
+    autoForceJoin = false, 
+    forceDuration = 10,
+    forceStartTime = 0,
+    blacklist = {}, 
+    autoForceList = {}, 
+    forceJobId = nil,
+    currentTab = "Brainrot God",
+    currentForceTab = "Brainrot God",
+    filtersOpen = false,
+    blacklistOpen = false,
+    autoForceOpen = false,
+    isMinimized = false,
+    minimizeKey = Enum.KeyCode.RightControl,
+    isBinding = false,
+    antiError = false,
+    showFps = false,
+    showPing = false,
+    antiLagEnabled = false
+}
+
+local activeGradients = {} 
+local uiElements = {} 
+local logSortCounter = 0
+local BindBtnRef = nil
+
+local function saveSettings()
+    local data = {
+        minMoney = state.minMoney,
+        minForceMoney = state.minForceMoney, 
+        autoForceJoin = state.autoForceJoin, 
+        forceDuration = state.forceDuration,
+        blacklist = state.blacklist,
+        autoForceList = state.autoForceList,
+        bind = state.minimizeKey.Name,
+        antiError = state.antiError,
+        showFps = state.showFps,
+        showPing = state.showPing,
+        antiLagEnabled = state.antiLagEnabled
+    }
+    pcall(function() if writefile then writefile(SETTINGS_FILE, HttpService:JSONEncode(data)) end end)
+end
+
+local function loadSettings()
+    pcall(function()
+        if isfile and isfile(SETTINGS_FILE) then
+            local raw = readfile(SETTINGS_FILE)
+            local data = HttpService:JSONDecode(raw)
+            if data.minMoney then state.minMoney = data.minMoney end
+            if data.minForceMoney then state.minForceMoney = data.minForceMoney end
+            if data.autoForceJoin ~= nil then state.autoForceJoin = data.autoForceJoin end
+            if data.forceDuration then state.forceDuration = data.forceDuration end
+            if data.blacklist then state.blacklist = data.blacklist end
+            if data.autoForceList then state.autoForceList = data.autoForceList end
+            if data.bind then 
+               local success, key = pcall(function() return Enum.KeyCode[data.bind] end)
+                if success and key then state.minimizeKey = key end
+            end
+            if data.antiError ~= nil then state.antiError = data.antiError end
+            if data.showFps ~= nil then state.showFps = data.showFps end
+            if data.showPing ~= nil then state.showPing = data.showPing end
+            if data.antiLagEnabled ~= nil then state.antiLagEnabled = data.antiLagEnabled end
+        end
+    end)
+end
+loadSettings()
+
+local function safeParent(gui)
+    if gethui then gui.Parent = gethui()
+    elseif syn and syn.protect_gui then syn.protect_gui(gui);
+    gui.Parent = CoreGui
+    else pcall(function() gui.Parent = CoreGui end) end
+end
+
+local function cleanMoney(val)
+    if type(val) == "number" then return val end
+    if type(val) == "string" then
+        local cleaned = val:gsub("[^0-9%.]", "")
+        return tonumber(cleaned) or 0
+    end
+    return 0
+end
+
+local function getNormalizedMoney(val)
+    val = cleanMoney(val)
+    if val > 999999 then return val / 1000000 end
+    return val 
+end
+
+local function formatMoney(val)
+    val = getNormalizedMoney(val)
+    if val >= 1000 then return string.format("%.1fB", val/1000) end
+    return string.format("%.0fM", val) 
+end
+
+local GRADIENT_AQUA = {
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 255)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 255))
+}
+local GRADIENT_FILTERS = {
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(0, 255, 255)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(170, 0, 255))
+}
+
+local function applyAnimatedGradient(obj, colors)
+    if not obj:IsA("TextLabel") and not obj:IsA("TextButton") and not obj:IsA("TextBox") and not obj:IsA("UIStroke") and not obj:IsA("Frame") then return end
+    local grad = Instance.new("UIGradient")
+    if type(colors) == "table" then grad.Color = ColorSequence.new(colors) else grad.Color = colors end
+    grad.Rotation = 45
+    grad.Parent = obj
+    table.insert(activeGradients, grad)
+    return grad
+end
+
+RunService.RenderStepped:Connect(function()
+    for _, grad in ipairs(activeGradients) do
+        if grad.Parent then grad.Rotation = (grad.Rotation + 2) % 360 end
+    end
+end)
+
+local function destroyGarbage(item)
+    if not item then return end
+    if item:IsA("Accessory") or item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") or item:IsA("CharacterMesh") or item:IsA("Hat") or item:IsA("FaceControls") then
+        item:Destroy()
+    elseif item:IsA("Decal") and (item.Name == "face" or item.Parent.Name == "Head") then
+        item:Destroy()
+    end
+end
+
+local function globalSweep()
+    if not state.antiLagEnabled then return end
+    for _, descendant in ipairs(Workspace:GetDescendants()) do destroyGarbage(descendant) end
+end
+
+Workspace.DescendantAdded:Connect(function(descendant)
+    if state.antiLagEnabled then destroyGarbage(descendant) end
+end)
+
+task.spawn(function()
+    while true do
+        if state.forceJobId then
+            if state.forceStartTime and (os.clock() - state.forceStartTime >= state.forceDuration) then
+                state.forceJobId = nil
+                if uiElements.LogScroll then
+                    for _, row in ipairs(uiElements.LogScroll:GetChildren()) do
+                        if row:IsA("Frame") then
+                            local forceBtn = row:FindFirstChild("ForceBtn")
+                            if forceBtn and forceBtn.Text == "STOP" then
+                                forceBtn.Text = "FORCE"
+                                forceBtn.BackgroundColor3 = COLORS.Unselected
+                                local original = row:GetAttribute("OriginalOrder")
+                                if original then 
+                                    row.LayoutOrder = original
+                                end
+                            end
+                        end
+                    end
+                end
+            else
+                ultraCheckjobid(state.forceJobId)
+            end
+        end
+        task.wait(FORCE_DELAY)
+    end
+end)
+
+RunService.RenderStepped:Connect(function()
+    if state.antiError then
+        GuiService:ClearError()
+    end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "Miku_v1_SecureWebhook"
+ScreenGui.ResetOnSpawn = false
+safeParent(ScreenGui)
+
+local OverlayFrame = Instance.new("Frame")
+OverlayFrame.Name = "OverlayStats"
+OverlayFrame.Size = UDim2.new(0, 200, 0, 30)
+OverlayFrame.Position = UDim2.new(0.5, -100, 0, 5) 
+OverlayFrame.BackgroundTransparency = 1
+OverlayFrame.Parent = ScreenGui
+local OverlayLayout = Instance.new("UIListLayout")
+OverlayLayout.FillDirection = Enum.FillDirection.Horizontal
+OverlayLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+OverlayLayout.Padding = UDim.new(0, 10)
+OverlayLayout.Parent = OverlayFrame
+
+local function createOverlayLabel(text)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 80, 0, 25)
+    frame.BackgroundColor3 = COLORS.Background
+    frame.BackgroundTransparency = 0.3
+    frame.Visible = false
+    frame.Parent = OverlayFrame
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 6)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1,0,1,0)
+    lbl.BackgroundTransparency = 1
+    lbl.TextColor3 = COLORS.TextWhite
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 14
+    lbl.Text = text
+    lbl.Parent = frame
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 1.5
+    stroke.Color = COLORS.Stroke
+    stroke.Parent = frame
+    applyAnimatedGradient(stroke, GRADIENT_AQUA)
+    return frame, lbl
+end
+
+local FpsFrame, FpsLabel = createOverlayLabel("FPS: 0")
+local PingFrame, PingLabel = createOverlayLabel("Ping: 0")
+
+RunService.RenderStepped:Connect(function(deltaTime)
+    if state.showFps then
+        FpsFrame.Visible = true
+        FpsLabel.Text = "FPS: " .. math.floor(1 / deltaTime)
+    else FpsFrame.Visible = false end
+
+    if state.showPing then
+        PingFrame.Visible = true
+        local ping = 0
+        pcall(function() ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue()) end)
+        PingLabel.Text = "Ping: " .. ping .. "ms"
+    else PingFrame.Visible = false end
+end)
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 340, 0, 380)
+MainFrame.Position = UDim2.new(0.5, -170, 0.5, -190)
+MainFrame.BackgroundColor3 = COLORS.Background
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = true 
+MainFrame.Parent = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 26)
+
+local AnimatedStroke = Instance.new("UIStroke")
+AnimatedStroke.Thickness = 3.5 
+AnimatedStroke.Color = COLORS.TextWhite 
+AnimatedStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+AnimatedStroke.Parent = MainFrame
+
+local StrokeGradient = Instance.new("UIGradient")
+StrokeGradient.Color = ColorSequence.new(COLORS.Stroke)
+StrokeGradient.Transparency = NumberSequence.new({
+    NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(0.4, 0), NumberSequenceKeypoint.new(1, 1)
+})
+StrokeGradient.Rotation = 45
+StrokeGradient.Parent = AnimatedStroke
+
+RunService.RenderStepped:Connect(function() if MainFrame.Visible then StrokeGradient.Rotation = StrokeGradient.Rotation + 3 end end)
+
+local Header = Instance.new("Frame")
+Header.Size = UDim2.new(1, 0, 0, 50)
+Header.BackgroundTransparency = 1
+Header.ZIndex = 10 
+Header.Parent = MainFrame
+
+local Title = Instance.new("TextLabel")
+Title.Text = "Miku Script"
+Title.Font = Enum.Font.GothamBlack
+Title.TextSize = 16
+Title.TextColor3 = COLORS.TextWhite
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Size = UDim2.new(0.5, 0, 1, 0)
+Title.Position = UDim2.new(0, 30, 0, 0) 
+Title.BackgroundTransparency = 1
+Title.Parent = Header
+applyAnimatedGradient(Title, GRADIENT_AQUA)
+
+local FilterBtn = Instance.new("TextButton")
+FilterBtn.Size = UDim2.new(0, 80, 0, 28)
+FilterBtn
